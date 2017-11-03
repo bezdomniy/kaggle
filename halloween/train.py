@@ -17,34 +17,13 @@ import implementation as imp
 
 batch_size = imp.batch_size
 iterations = 100000
-seq_length = 40  # Maximum length of sentence
+seq_length = imp.max_len  # Maximum length of sentence
 
 checkpoints_dir = "./checkpoints"
 
-def getTrainBatch():
-    labels = []
-    arr = np.zeros([batch_size, seq_length])
-    for i in range(batch_size):
-        if (i % 2 == 0):
-            num = randint(0, 12499)
-            labels.append([1, 0])
-        else:
-            num = randint(12500, 24999)
-            labels.append([0, 1])
-        arr[i] = training_data[num]
-    return arr, labels
-
-def getValBatch():
-    labels = []
-    arr = np.zeros([batch_size, seq_length])
-    for i in range(batch_size):
-        if (i % 2 == 0):
-            num = randint(0, 12499)
-            labels.append([1, 0])
-        else:
-            num = randint(12500, 24999)
-            labels.append([0, 1])
-        arr[i] = test_data[num]
+def getTrainBatch(data,labels):
+    arr = data[np.random.randint(data.shape[0], size=batch_size), :]
+    labels = labels[np.random.randint(labels.shape[0], size=batch_size), :]
     return arr, labels
 
 
@@ -52,8 +31,10 @@ def getValBatch():
 glove_array, glove_dict = imp.load_glove_embeddings()
 print("Loaded glove")
 
-training_data = imp.load_data(glove_dict)
-test_data = imp.load_data(glove_dict,test=True)
+
+
+training_data, training_labels = imp.load_data(glove_dict)
+
 print("Loaded data")
 
 input_data, labels, dropout_keep_prob, optimizer, accuracy, loss = \
@@ -61,7 +42,7 @@ input_data, labels, dropout_keep_prob, optimizer, accuracy, loss = \
 
 # tensorboard
 train_acc_op = tf.summary.scalar("training_accuracy", accuracy)
-test_acc_op = tf.summary.scalar("testing_accuracy", accuracy)
+
 #tf.summary.scalar("loss", loss)
 #summary_op = tf.summary.merge_all()
 
@@ -78,9 +59,9 @@ writer = tf.summary.FileWriter(logdir, sess.graph)
 accuracies = []
 
 for i in range(iterations+1):
-    batch_data, batch_labels = getTrainBatch()
+    batch_data, batch_labels = getTrainBatch(training_data,training_labels)
 
-    val_data, val_labels = getValBatch()
+    #val_data, val_labels = getValBatch()
     sess.run(optimizer, {input_data: batch_data, labels: batch_labels, dropout_keep_prob: 0.5})
     if (i % 50 == 0):
         accuracy_value, train_summ = sess.run(
@@ -88,14 +69,14 @@ for i in range(iterations+1):
             {input_data: batch_data, labels: batch_labels})
         writer.add_summary(train_summ, i)
 
-        accuracy_validation, valid_summ = sess.run([accuracy, test_acc_op],{input_data: val_data, labels: val_labels})
+        #accuracy_validation, valid_summ = sess.run([accuracy, test_acc_op],{input_data: val_data, labels: val_labels})
         #accuracies.append(accuracy_validation)
-        writer.add_summary(valid_summ , i)
+        #writer.add_summary(valid_summ , i)
 
         print("Iteration: ", i)
         #print("loss", loss_value)
         print("acc", accuracy_value)
-        print("test acc", accuracy_validation)
+        #print("test acc", accuracy_validation)
 
     if (i % 10000 == 0 and i != 0):
         if not os.path.exists(checkpoints_dir):
