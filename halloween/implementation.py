@@ -6,10 +6,9 @@ import string
 from collections import deque
 import tensorflow as tf
 import csv
-import pandas as pd 
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import RegexpTokenizer
+import pandas as pd
+import spacy
+
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 batch_size = 50
@@ -17,42 +16,46 @@ batch_size = 50
 max_len = 0
 filename = 'train.csv'
 
+
 def unison_shuffled_copies(a, b):
     assert len(a) == len(b)
     p = np.random.permutation(len(a))
     return a[p], b[p]
 
+
 def load_data(glove_dict):
     global max_len
-    tokenizer = RegexpTokenizer(r'\w+')
-    lemmatizer = WordNetLemmatizer()
-    label_dict = {'EAP':[0,0,1],'HPL':[0,1,0],'MWS':[1,0,0]}
+
+    nlp = spacy.load('en')
+
+    label_dict = {'EAP': [0, 0, 1], 'HPL': [0, 1, 0], 'MWS': [1, 0, 0]}
     row_count = sum(1 for line in open(filename, 'r',  encoding='utf-8'))
 
-    
     with open(filename, 'r',  encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
         feature_name = next(reader)
-           
-        labels= np.zeros(shape=[row_count,3],dtype=np.int8)
 
-        text=[]
+        labels = np.zeros(shape=[row_count, 3], dtype=np.int8)
+
+        text = []
         #max_len = 0
 
-        i=0
+        i = 0
         for row in reader:
             labels[i] = label_dict[row[-1]]
-            words = tokenizer.tokenize(row[-2])
+            words = nlp(row[-2])
 
-            words = [lemmatizer.lemmatize(word) for word in words if word not in stopwords.words('english')]
+            words = [word.lemma_ for word in words if not (word.is_stop or word.is_punct)]
+
             if max_len < len(words):
                 max_len = len(words)
             text.append(words)
 
-            i+=1
+            i += 1
 
-        
-        data = np.zeros(shape=[row_count,max_len],dtype=np.int32)
+
+
+        data = np.zeros(shape=[row_count, max_len], dtype=np.int32)
 
         for i in range(len(text)):
             word_buffer = deque(text[i])
@@ -68,7 +71,8 @@ def load_data(glove_dict):
                 else:
                     data[i][j] = 0
 
-    return unison_shuffled_copies(data,labels)
+    return unison_shuffled_copies(data, labels)
+
 
 def load_glove_embeddings():
     """
@@ -101,7 +105,6 @@ def load_glove_embeddings():
             embeddings[word_counter - 1][vector_place] = float(data[i])
             vector_place += 1
     return embeddings, word_index_dict
-
 
 def define_graph(glove_embeddings_arr):
     """
