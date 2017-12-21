@@ -1,0 +1,19 @@
+{
+    "version": "0.0.1",
+    "job": {
+        "type": "General",
+        "files": {
+            "includes": [
+                "**/*.py"
+            ]
+        },
+        "author": "UserName",
+        "name": "",
+        "startupCommand": "python",
+        "startupScript": "voice.py",
+        "arguments": "",
+        "workingDirectory": ".",
+        "batchArguments": []
+    },
+    "platform": {}
+}

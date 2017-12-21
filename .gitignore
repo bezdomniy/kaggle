@@ -1,6 +1,8 @@
 .metadata
 bin/
 tmp/
+test/
+train/
 *.tmp
 *.bak
 *.swp
@@ -12,7 +14,8 @@ local.properties
 
 *.pdf
 *.arff
-
+*.wav
+*.7z
 
 *.gz
 *.tar.gz

@@ -26,7 +26,7 @@ def unison_shuffled_copies(a, b):
 def load_data(glove_dict):
     global max_len
 
-    nlp = spacy.load('en')
+    nlp = spacy.load('en_vectors_web_lg')
 
     label_dict = {'EAP': [0, 0, 1], 'HPL': [0, 1, 0], 'MWS': [1, 0, 0]}
     row_count = sum(1 for line in open(filename, 'r',  encoding='utf-8'))
@@ -45,15 +45,14 @@ def load_data(glove_dict):
             labels[i] = label_dict[row[-1]]
             words = nlp(row[-2])
 
-            words = [word.lemma_ for word in words if not (word.is_stop or word.is_punct)]
+            #words = [word.lemma_ for word in words if not (word.is_stop or word.is_punct)]
+            words = [word for word in words if not word.is_punct]
 
             if max_len < len(words):
                 max_len = len(words)
             text.append(words)
 
             i += 1
-
-
 
         data = np.zeros(shape=[row_count, max_len], dtype=np.int32)
 
@@ -84,8 +83,6 @@ def load_glove_embeddings():
             its index in the embeddings array. e.g. {"apple": 119"}
     """
 
-    # if you are running on the CSE machines, you can load the glove data from here
-    #data = open("/home/cs9444/public_html/17s2/hw2/glove.6B.50d.txt",'r',encoding="utf-8")
     data = open("glove.6B.50d.txt", 'r', encoding="utf-8").read().split()
 
     vocab_size = 400001
@@ -125,8 +122,8 @@ def define_graph(glove_embeddings_arr):
 
     embedding_shape = 50
     bidirectional = False
-    hidden_units = 128
-    fully_connected_units = 128    # 0 for no fully connected layer
+    hidden_units = 256
+    fully_connected_units = 0    # 0 for no fully connected layer
     num_layers = 2    # only works with non-bidirectional LSTM
     vocab_size = len(glove_embeddings_arr)
 
@@ -178,7 +175,7 @@ def define_graph(glove_embeddings_arr):
 
     def gru_cell_with_dropout():
         cell = tf.contrib.rnn.GRUCell(hidden_units)
-        return tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=dropout_keep_prob)
+        return tf.contrib.rnn.DropoutWrapper(cell, variational_recurrent=True, dtype=tf.float32 , output_keep_prob=dropout_keep_prob)
 
     def bidirectional_lstm_cell_with_dropout():
         #fwcell = tf.contrib.rnn.LSTMCell(hidden_units,forget_bias=0.0, state_is_tuple=True)
@@ -205,7 +202,7 @@ def define_graph(glove_embeddings_arr):
     if not bidirectional:
         if tf_version == '1.3' or tf_version == '1.2':
             cell = tf.nn.rnn_cell.MultiRNNCell(
-                [lstm_cell_with_dropout() for _ in range(num_layers)], state_is_tuple=True)
+                [gru_cell_with_dropout() for _ in range(num_layers)], state_is_tuple=True)
                 #[lstm_cell_with_layernorm_and_dropout() for _ in range(num_layers)], state_is_tuple=True)
                 #lstm_cell_with_dropout_reducing_by_half(), state_is_tuple=True)
                 #[lstm_cell_with_dropout()]+[lstm_cell_with_dropout_and_skip_connection() for _ in range(num_layers-1)], state_is_tuple=True)

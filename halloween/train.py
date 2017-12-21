@@ -22,9 +22,10 @@ seq_length = imp.max_len  # Maximum length of sentence
 checkpoints_dir = "./checkpoints"
 
 def getTrainBatch(data,labels):
-    arr = data[np.random.randint(data.shape[0], size=batch_size), :]
-    labels = labels[np.random.randint(labels.shape[0], size=batch_size), :]
-    return arr, labels
+    sample= np.random.randint(data.shape[0], size=batch_size)
+    arr = data[sample, :]
+    lab = labels[sample, :]
+    return arr, lab
 
 
 # Call implementation
