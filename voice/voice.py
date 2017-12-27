@@ -9,6 +9,7 @@ import webrtcvad
 from struct import *
 
 path = './train/audio/'
+max_len = 126
 
 def get_data(file_name):
     sample_rate, sample = read(file_name)
@@ -47,8 +48,12 @@ def remove_silence(sample,sample_rate):
     return np.concatenate(trimmed_split)
 
 def make_spectrogram(sample, sample_rate):
-    freqs, times, spectrogram = signal.spectrogram(sample, sample_rate)
-    return np.log(spectrogram.T.astype(np.float32) + 1e-10), freqs, times
+    #freqs, times, spectrogram = signal.spectrogram(sample, sample_rate)
+
+    freqs, times, spectrogram = signal.stft(sample,sample_rate)
+
+    return np.log1p(np.abs(spectrogram.T)), freqs, times
+    #return np.log(spectrogram.T.astype(np.float32) + 1e-10), freqs, times
 
 def show_graph(sample,sample_rate,freqs, times, spec):
     fig = plt.figure(figsize=(14, 8))
@@ -67,7 +72,7 @@ def show_graph(sample,sample_rate,freqs, times, spec):
 
 
 def load_data():
-    if not os.path.isfile('data.npy'):
+    if not os.path.isfile('spectrograms.npy'):
         print("Loading data for the first time...")
 
         categories = [os.path.split(os.path.split(f)[0])[1] for f in glob.glob(path+"*/")][:-1]
@@ -77,11 +82,16 @@ def load_data():
         for category in categories:
             file_list.extend(glob.glob(path+category+'/*'))
 
-        spectrogram_list = []
+        #spectrogram_list = []
 
-        for f in file_list:
+        spectrograms = np.zeros([len(file_list),max_len,129], dtype=np.float32)
+        labels = np.zeros([len(file_list),30], dtype=np.int8)
+        lengths = np.zeros([len(file_list)], dtype=np.int32)
+
+        for i in range(len(file_list)):
+            f = file_list[i]
             cat = os.path.basename(os.path.dirname(f))
-            one_hot_cat = np.array(one_hot_categories[cat])
+            labels[i,:] = np.array(one_hot_categories[cat])
             sample,sample_rate = get_data(f)
             trimmed = remove_silence(sample,sample_rate)
 
@@ -89,19 +99,28 @@ def load_data():
                 continue
 
             spec, freqs, times = make_spectrogram(trimmed, sample_rate)
+            lengths[i] = spec.shape[0]
 
-            length = spec.shape[0]
 
-            spectrogram_list.append((spec, (freqs.min(),freqs.max()), (times.min(), times.max()), length, one_hot_cat))
+            #padding = np.zeros([71 - length, 129])
+            #spec = np.concatenate([spec,padding],axis=0)
 
-        np.save('data',spectrogram_list)
+            #spectrogram_list.append((spec, length, one_hot_cat))
+
+            spectrograms[i,:lengths[i],:] = spec
+
+        np.save('spectrograms',spectrograms,lengths,labels)
+        np.save('labels',labels)
+        np.save('lengths',lengths)
    
     else:
         print("Loading data from file...")
-        spectrogram_list = np.load('data.npy')
+        spectrograms = np.load('spectrograms.npy')
+        labels = np.load('labels.npy')
+        lengths = np.load('lengths.npy')
     print("Done.")
         
-    return spectrogram_list
+    return spectrograms,labels,lengths
 
 
 #sample, sample_rate = get_data()

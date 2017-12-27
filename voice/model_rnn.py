@@ -1,21 +1,29 @@
 import numpy as np
+import datetime
+import os
 import tensorflow as tf
-from voice import load_data 
+from voice import load_data,max_len
 
-batch_size = 50
-max_len = 71
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-def getTrainBatch(data):
-    sample= np.random.randint(data.shape[0], size=batch_size)
-    arr = data[sample, 0]
-    lengths = data[sampe,-2]
-    lab = data[sample, -1]
+checkpoints_dir = "./checkpoints"
+
+batch_size = 200
+iterations = 100000
+#max_len = 86
+
+def getTrainBatch(spectrograms,labels,lengths):
+    sample= np.random.randint(spectrograms.shape[0], size=batch_size)
+
+    arr = spectrograms[sample]
+    lengths = lengths[sample]
+    lab = labels[sample]
     return arr, lengths, lab
 
 def run():
-    data = load_data()
+    spectrograms,cats,lengths = load_data()
 
-    input_data, labels, dropout_keep_prob, optimizer, accuracy, loss = \
+    input_data, labels, input_lengths, optimizer, accuracy, loss = \
     define_graph()
 
     # tensorboard
@@ -37,14 +45,15 @@ def run():
     accuracies = []
 
     for i in range(iterations+1):
-        batch_data, batch_lengths, batch_labels = getTrainBatch(data)
+        batch_data, batch_lengths, batch_labels = getTrainBatch(spectrograms,cats,lengths)
 
         #val_data, val_labels = getValBatch()
-        sess.run(optimizer, {input_data: batch_data, input_lengths: batch_lengths, labels: batch_labels, dropout_keep_prob: 0.5})
+
+        sess.run(optimizer, {input_data: batch_data, input_lengths: batch_lengths, labels: batch_labels})
         if (i % 50 == 0):
             accuracy_value, train_summ = sess.run(
                 [accuracy, train_acc_op],
-                {input_data: batch_data, labels: batch_labels})
+                {input_data: batch_data, input_lengths: batch_lengths, labels: batch_labels})
             writer.add_summary(train_summ, i)
 
             print("Iteration: ", i)
@@ -63,12 +72,11 @@ def run():
     sess.close()
 
 def define_graph():
-    max_len = 16000
-    dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
+    dropout_keep_prob = 0.5
 
 
     bidirectional = False
-    hidden_units = 256
+    hidden_units = 128
     fully_connected_units = 0    # 0 for no fully connected layer
     num_layers = 2    # only works with non-bidirectional LSTM
 
@@ -86,8 +94,7 @@ def define_graph():
         last = tf.gather(flat, index)
         return last
 
-
-    inputs = tf.placeholder(tf.int32, [batch_size, max_len, 129], name="input_data")
+    inputs = tf.placeholder(tf.float32, [batch_size, max_len, 129], name="inputs")
     labels = tf.placeholder(tf.int8, [batch_size, 30], name="labels")
     input_lengths = tf.placeholder(tf.int32, [batch_size], name="input_lengths")
 
@@ -147,8 +154,7 @@ def define_graph():
             #[lstm_cell_with_dropout()]+[lstm_cell_with_dropout_and_skip_connection() for _ in range(num_layers-1)], state_is_tuple=True)
 
         initial_state = cell.zero_state(batch_size, tf.float32)
-        outputs, state = tf.nn.dynamic_rnn(
-            cell, inputs,sequence_length=input_lengths, initial_state=initial_state, dtype=tf.float32)
+        outputs, state = tf.nn.dynamic_rnn(cell, inputs, sequence_length=input_lengths, initial_state=initial_state, dtype=tf.float32)
     else:
         # trying bidirectional lstm
         #fwcell, bwcell = bidirectional_lstm_cell_with_dropout()  
@@ -174,8 +180,9 @@ def define_graph():
     else:
         fully_connected = last_output
 
-    logits = tf.contrib.layers.fully_connected(fully_connected, 3, activation_fn=None)
+    logits = tf.contrib.layers.fully_connected(fully_connected, 30, activation_fn=None)
     preds = tf.nn.softmax(logits)
+
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels),name="loss")
 
     # Do gradient clipping over all variables
@@ -188,6 +195,6 @@ def define_graph():
 
     accuracy = tf.reduce_mean(tf.cast(correct_preds, tf.float32),name="accuracy")
 
-    return input_data, labels, dropout_keep_prob, optimizer, accuracy, loss
+    return inputs, labels,input_lengths, optimizer, accuracy, loss
 
 run()
