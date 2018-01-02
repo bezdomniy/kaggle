@@ -9,6 +9,7 @@ import webrtcvad
 from struct import *
 
 path = './train/audio/'
+test_path = './test/'
 max_len = 126
 
 def get_data(file_name):
@@ -76,16 +77,17 @@ def load_data():
         print("Loading data for the first time...")
 
         categories = [os.path.split(os.path.split(f)[0])[1] for f in glob.glob(path+"*/")][:-1]
+        categories.append('silence')
+
         one_hot_categories = pd.get_dummies(categories)
         file_list = []
 
-        for category in categories:
+        for category in categories[:-1]:
             file_list.extend(glob.glob(path+category+'/*'))
 
-        #spectrogram_list = []
 
         spectrograms = np.zeros([len(file_list),max_len,129], dtype=np.float32)
-        labels = np.zeros([len(file_list),30], dtype=np.int8)
+        labels = np.zeros([len(file_list),31], dtype=np.int8)
         lengths = np.zeros([len(file_list)], dtype=np.int32)
 
         for i in range(len(file_list)):
@@ -96,20 +98,18 @@ def load_data():
             trimmed = remove_silence(sample,sample_rate)
 
             if trimmed is None:
+                print('silence at ',i)
+                spec, freqs, times = make_spectrogram(sample, sample_rate)
+                lengths[i] = spec.shape[0]
+                labels[i,:] = np.array(one_hot_categories['silence'])
                 continue
 
             spec, freqs, times = make_spectrogram(trimmed, sample_rate)
             lengths[i] = spec.shape[0]
 
-
-            #padding = np.zeros([71 - length, 129])
-            #spec = np.concatenate([spec,padding],axis=0)
-
-            #spectrogram_list.append((spec, length, one_hot_cat))
-
             spectrograms[i,:lengths[i],:] = spec
 
-        np.save('spectrograms',spectrograms,lengths,labels)
+        np.save('spectrograms',spectrograms)
         np.save('labels',labels)
         np.save('lengths',lengths)
    
@@ -123,12 +123,36 @@ def load_data():
     return spectrograms,labels,lengths
 
 
-#sample, sample_rate = get_data()
-#trimmed = remove_silence(sample,sample_rate)
-#freqs, times, spec = make_spectrogram(trimmed, sample_rate)
-#show_graph(trimmed, freqs, times, spec)
+def load_test_data():
+    if not os.path.isfile('test_data.npy'):
+        print("Loading test data for the first time...")
 
+        file_list = glob.glob(test_path+'/*')
 
-#categories = [os.path.split(os.path.split(f)[0])[1] for f in glob.glob(path+"*/")][:-1]
-#one_hot_categories = pd.get_dummies(categories)
-#print(categories)
+        spectrograms = np.zeros([len(file_list),max_len,129], dtype=np.float32)
+        lengths = np.zeros([len(file_list)], dtype=np.int32)
+
+        for i in range(len(file_list)):
+            f = file_list[i]
+            sample,sample_rate = get_data(f)
+            trimmed = remove_silence(sample,sample_rate)
+
+            if trimmed is None:
+                #spectrograms[i,:lengths[i],:] = spec
+                continue
+
+            spec, freqs, times = make_spectrogram(trimmed, sample_rate)
+            lengths[i] = spec.shape[0]
+
+            spectrograms[i,:lengths[i],:] = spec
+
+        np.save('test_spectrograms',spectrograms)
+        np.save('test_lengths',lengths)
+   
+    else:
+        print("Loading test data from file...")
+        spectrograms = np.load('test_data.npy')
+        lengths = np.load('test_lengths.npy')
+    print("Done.")
+        
+    return spectrograms,lengths

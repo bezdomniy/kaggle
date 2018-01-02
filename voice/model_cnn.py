@@ -113,7 +113,7 @@ def define_graph():
         return length
 
     inputs = tf.placeholder(tf.float32, [batch_size, max_len, 129], name="inputs")
-    labels = tf.placeholder(tf.int8, [batch_size, 30], name="labels")
+    labels = tf.placeholder(tf.int8, [batch_size, 31], name="labels")
     input_lengths = tf.placeholder(tf.int32, [batch_size], name="input_lengths")
 
 
@@ -133,12 +133,12 @@ def define_graph():
     
     output = tf.reshape(output, [batch_size, 7 * 8 * 128])
 
-    fully_connected = tf.layers.dense(output, fully_connected_units, activation_fn=tf.sigmoid)
+    fully_connected = tf.layers.dense(output, fully_connected_units, activation=tf.sigmoid)
 
     dropout = tf.layers.dropout(inputs=fully_connected, rate=0.5)
 
 
-    logits = tf.contrib.layers.fully_connected(dropout, 30, activation_fn=None)
+    logits = tf.layers.dense(dropout, 31, activation=None)
     preds = tf.nn.softmax(logits)
 
 
@@ -155,17 +155,3 @@ def define_graph():
     accuracy = tf.reduce_mean(tf.cast(correct_preds, tf.float32),name="accuracy")
 
     return inputs, labels,input_lengths, dropout_keep_prob, optimizer, accuracy, loss
-
-
-
-def run():
-    spectrograms,cats,lengths = load_data()
-    spectrograms,cats,lengths = shuffle(spectrograms,cats,lengths, random_state=0)
-
-    train_data, train_lengths, train_labels = getData(spectrograms,cats,lengths)
-    train(train_data, train_lengths, train_labels)
-
-    val_data, val_lengths, val_labels = getData(spectrograms,cats,lengths, test=True)
-    test(val_data, val_lengths, val_labels)
-
-run()
