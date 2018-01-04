@@ -31,11 +31,11 @@ def getData(spectrograms,labels,lengths, test=False):
             
 
 def validate(val_data, val_lengths, val_labels):
-    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-5000.meta')
+    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-50000.meta')
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-5000.meta')
+        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-50000')
 
         graph = tf.get_default_graph()
 
@@ -54,18 +54,22 @@ def validate(val_data, val_lengths, val_labels):
             accuracies.append(accuracy_value)
         print("Test Accuracy = {:.3f}".format(np.mean(accuracies)))
 
-def test(test_data, test_lengths):
-    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-5000.meta')
-    prediction_list = np.zeros([test_data.shape[0],12])
-
+def test(test_data, test_lengths, file_list):
+    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-50000.meta')
+    
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-5000.meta')
+        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-50000')
 
         graph = tf.get_default_graph()
 
         #print([n.name for n in tf.get_default_graph().as_graph_def().node])
-        #exit()
+
+        prediction_list = np.empty([test_data.shape[0]+1, 2],dtype="<U18")
+        prediction_list[0,0] = "fname"
+        prediction_list[0,1] = "label"
+        limited_categories = np.array(["yes", "no", "up", "down", "left", "right", "on",
+                        "off", "stop", "go", "silence", "unknown"])
 
         input_data = graph.get_tensor_by_name("inputs:0")
         input_lengths = graph.get_tensor_by_name("input_lengths:0")
@@ -75,10 +79,17 @@ def test(test_data, test_lengths):
 
 
         for i in range(0,test_data.shape[0],batch_size):  
+            
             next_predictions = sess.run(predictions,{input_data: test_data[i:i+batch_size]})
-            prediction_list[i:i+batch_size,:] = next_predictions
+
+            prediction_list[i+1:i+batch_size+1,0] = file_list[i:i+batch_size]
+            prediction_list[i+1:i+batch_size+1,1] = limited_categories[np.argmax(next_predictions, axis = 1)]
+
+            print(i,end=" ")
+            print(prediction_list[i])
         print("Test complete")
         np.save('prediction_list',prediction_list)
+    return prediction_list
 
 
 def train(spectrograms,lengths, cats, lim = False):
