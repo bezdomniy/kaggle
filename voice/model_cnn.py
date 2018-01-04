@@ -7,11 +7,12 @@ from voice import load_data,max_len
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-checkpoints_dir = "./checkpoints"
+#checkpoints_dir = "./checkpoints"
+checkpoints_dir = "./gc"
 
 batch_size = 200
-iterations = 20001
-train_size = 50121
+iterations = 70001
+train_size = 64721
 
 def getTrainBatch(spectrograms,labels,lengths):
     #sample= np.random.randint(spectrograms.shape[0], size=batch_size)
@@ -29,12 +30,12 @@ def getData(spectrograms,labels,lengths, test=False):
         return spectrograms[:train_size], lengths[:train_size], labels[:train_size]
             
 
-def test(val_data, val_lengths, val_labels):
-    saver = tf.train.import_meta_graph('./checkpoints/trained_model.ckpt-20000.meta')
+def validate(val_data, val_lengths, val_labels):
+    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-5000.meta')
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, './checkpoints/trained_model.ckpt-20000')
+        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-5000.meta')
 
         graph = tf.get_default_graph()
 
@@ -53,12 +54,38 @@ def test(val_data, val_lengths, val_labels):
             accuracies.append(accuracy_value)
         print("Test Accuracy = {:.3f}".format(np.mean(accuracies)))
 
+def test(test_data, test_lengths):
+    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-5000.meta')
+    prediction_list = np.zeros([test_data.shape[0],12])
 
-def train(spectrograms,lengths, cats):
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-5000.meta')
+
+        graph = tf.get_default_graph()
+
+        #print([n.name for n in tf.get_default_graph().as_graph_def().node])
+        #exit()
+
+        input_data = graph.get_tensor_by_name("inputs:0")
+        input_lengths = graph.get_tensor_by_name("input_lengths:0")
+
+        predictions = graph.get_tensor_by_name("predictions:0")
+        print("Model restored.")
+
+
+        for i in range(0,test_data.shape[0],batch_size):  
+            next_predictions = sess.run(predictions,{input_data: test_data[i:i+batch_size]})
+            prediction_list[i:i+batch_size,:] = next_predictions
+        print("Test complete")
+        np.save('prediction_list',prediction_list)
+
+
+def train(spectrograms,lengths, cats, lim = False):
     #spectrograms,cats,lengths = load_data()
 
     input_data, labels, input_lengths, dropout_keep_prob, optimizer, accuracy, loss = \
-    define_graph()
+    define_graph(limited= lim)
 
     # tensorboard
     train_acc_op = tf.summary.scalar("training_accuracy", accuracy)
@@ -93,7 +120,7 @@ def train(spectrograms,lengths, cats):
             print("acc", accuracy_value)
             #print("test acc", accuracy_validation)
 
-        if (i % 10000 == 0 and i != 0):
+        if (i % 5000 == 0 and i != 0):
             if not os.path.exists(checkpoints_dir):
                 os.makedirs(checkpoints_dir)
             save_path = all_saver.save(sess, checkpoints_dir +
@@ -103,8 +130,13 @@ def train(spectrograms,lengths, cats):
 
     sess.close()
 
-def define_graph():
-    fully_connected_units = 128    
+def define_graph(limited = False):
+    fully_connected_units = 64 #128  
+
+    if limited:
+        output_units = 12 
+    else:
+        output_units = 31
  
     # Length vector for 0 padded tensor
     def length(data):
@@ -113,7 +145,7 @@ def define_graph():
         return length
 
     inputs = tf.placeholder(tf.float32, [batch_size, max_len, 129], name="inputs")
-    labels = tf.placeholder(tf.int8, [batch_size, 30], name="labels")
+    labels = tf.placeholder(tf.int8, [batch_size, output_units], name="labels")
     input_lengths = tf.placeholder(tf.int32, [batch_size], name="input_lengths")
 
 
@@ -128,18 +160,21 @@ def define_graph():
     output = tf.layers.max_pooling2d(output, 2, 2)
     output = tf.layers.conv2d(output,64,3,1,"same",activation=tf.nn.relu)
     output = tf.layers.max_pooling2d(output, 2, 2)
-    output = tf.layers.conv2d(output,128,3,1,"same",activation=tf.nn.relu)
-    output = tf.layers.max_pooling2d(output, 2, 2)
+    #print(output.shape)
+    #output = tf.layers.conv2d(output,128,3,1,"same",activation=tf.nn.relu)
+    #output = tf.layers.max_pooling2d(output, 2, 2)
+
+    #output = tf.reshape(output, [batch_size, 7 * 8 * 128])
     
-    output = tf.reshape(output, [batch_size, 7 * 8 * 128])
+    output = tf.reshape(output, [batch_size, 15 * 16 * 64])
 
-    fully_connected = tf.layers.dense(output, fully_connected_units, activation_fn=tf.sigmoid)
+    fully_connected = tf.layers.dense(output, fully_connected_units, activation=tf.sigmoid)
 
-    dropout = tf.layers.dropout(inputs=fully_connected, rate=0.5)
+    dropout = tf.layers.dropout(inputs=fully_connected, rate=dropout_keep_prob)
 
 
-    logits = tf.contrib.layers.fully_connected(dropout, 30, activation_fn=None)
-    preds = tf.nn.softmax(logits)
+    logits = tf.layers.dense(dropout, output_units, activation=None)
+    preds = tf.nn.softmax(logits,name="predictions")
 
 
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels),name="loss")
@@ -155,17 +190,3 @@ def define_graph():
     accuracy = tf.reduce_mean(tf.cast(correct_preds, tf.float32),name="accuracy")
 
     return inputs, labels,input_lengths, dropout_keep_prob, optimizer, accuracy, loss
-
-
-
-def run():
-    spectrograms,cats,lengths = load_data()
-    spectrograms,cats,lengths = shuffle(spectrograms,cats,lengths, random_state=0)
-
-    train_data, train_lengths, train_labels = getData(spectrograms,cats,lengths)
-    train(train_data, train_lengths, train_labels)
-
-    val_data, val_lengths, val_labels = getData(spectrograms,cats,lengths, test=True)
-    test(val_data, val_lengths, val_labels)
-
-run()

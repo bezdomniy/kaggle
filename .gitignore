@@ -28,6 +28,7 @@ summaries/
 tensorboard/
 checkpoints/
 saved_models/
+gc/
 
 # External tool builders
 .externalToolBuilders/
