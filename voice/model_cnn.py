@@ -11,7 +11,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 checkpoints_dir = "./gc"
 
 batch_size = 200
-iterations = 70001
+iterations = 50001
 train_size = 64721
 
 def getTrainBatch(spectrograms,labels,lengths):
@@ -56,7 +56,7 @@ def validate(val_data, val_lengths, val_labels):
 
 def test(test_data, test_lengths, file_list):
     saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-50000.meta')
-    
+    test_data = test_data[:203]
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-50000')
@@ -79,14 +79,21 @@ def test(test_data, test_lengths, file_list):
 
 
         for i in range(0,test_data.shape[0],batch_size):  
-            
-            next_predictions = sess.run(predictions,{input_data: test_data[i:i+batch_size]})
+            if i+batch_size <= test_data.shape[0]:
+                next_predictions = sess.run(predictions,{input_data: test_data[i:i+batch_size]})
 
-            prediction_list[i+1:i+batch_size+1,0] = file_list[i:i+batch_size]
-            prediction_list[i+1:i+batch_size+1,1] = limited_categories[np.argmax(next_predictions, axis = 1)]
+                prediction_list[i+1:i+batch_size+1,0] = file_list[i:i+batch_size]
+                prediction_list[i+1:i+batch_size+1,1] = limited_categories[np.argmax(next_predictions, axis = 1)]
+            else:
+                backtrack = 200 - (test_data.shape[0] % 200)
 
+                next_predictions = sess.run(predictions, \
+                    {input_data: test_data[i-backtrack:test_data.shape[0]]})
+
+                prediction_list[i-backtrack+1:test_data.shape[0]+1,0] = file_list[i-backtrack:test_data.shape[0]]
+                prediction_list[i-backtrack+1:test_data.shape[0]+1,1] = limited_categories[np.argmax(next_predictions, axis = 1)]
             print(i,end=" ")
-            print(prediction_list[i])
+            print(prediction_list[i+1])
         print("Test complete")
         np.save('prediction_list',prediction_list)
     return prediction_list
@@ -131,7 +138,7 @@ def train(spectrograms,lengths, cats, lim = False):
             print("acc", accuracy_value)
             #print("test acc", accuracy_validation)
 
-        if (i % 5000 == 0 and i != 0):
+        if (i % 10000 == 0 and i != 0):
             if not os.path.exists(checkpoints_dir):
                 os.makedirs(checkpoints_dir)
             save_path = all_saver.save(sess, checkpoints_dir +

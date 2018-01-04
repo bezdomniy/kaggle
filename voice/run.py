@@ -18,9 +18,9 @@ def run_training(validation=True):
 def run_testing():
     spectrograms, lengths, file_list = load_test_data()
     predictions = test(spectrograms, lengths, file_list)
-    #predictions = test(1, 1)
-
-    np.savetxt("out.csv", predictions, delimiter=",")
+    with open('out.csv','w') as f:
+        print(predictions[0])
+        np.savetxt(f, predictions, delimiter=",",fmt='%s,%s')
     
-#run_training()
-run_testing()
+run_training(validation=False)
+#run_testing()

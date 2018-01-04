@@ -43,7 +43,7 @@ def remove_silence(sample,sample_rate):
 
     speech_frames = np.where(is_speech_array)[0]
 
-    if len(speech_frames) <= 2:
+    if len(speech_frames) <= 20:
         return None
 
     first_speech_frame, last_speech_frame = speech_frames[0] , speech_frames[-1]
