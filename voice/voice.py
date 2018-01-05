@@ -94,11 +94,14 @@ def load_data(limited = False):
         for category in categories[:-1]:
             file_list.extend(glob.glob(path+category+'/*'))
 
+        silences = load_silences()
 
-        spectrograms = np.zeros([len(file_list),max_len,129], dtype=np.float32)
-        labels = np.zeros([len(file_list),31], dtype=np.int8)
-        limited_labels = np.zeros([len(file_list),12], dtype=np.int8)
-        lengths = np.zeros([len(file_list)], dtype=np.int32)
+        num_samples = len(file_list) + len(silences)
+
+        spectrograms = np.zeros([num_samples,max_len,129], dtype=np.float32)
+        labels = np.zeros([num_samples,31], dtype=np.int8)
+        limited_labels = np.zeros([num_samples,12], dtype=np.int8)
+        lengths = np.zeros([num_samples], dtype=np.int32)
 
         for i in range(len(file_list)):
             f = file_list[i]
@@ -122,7 +125,13 @@ def load_data(limited = False):
             lengths[i] = spec.shape[0]
             spectrograms[i,:lengths[i],:] = spec
 
-            
+        
+        for i in range(len(file_list),num_samples):
+            spec, freqs, times = make_spectrogram(silences[i], 16000)
+            labels[i,:] = np.array(one_hot_categories['silence'])
+            limited_labels[i,:] = np.array(one_hot_limited_categories['silence'])
+            lengths[i] = spec.shape[0]
+            spectrograms[i,:lengths[i],:] = spec
 
         np.save('spectrograms',spectrograms)
         np.save('labels',labels)
@@ -181,4 +190,24 @@ def load_test_data():
     print("Done.")
         
     return spectrograms,lengths, file_names
+
+def load_silences():
+    file_list = glob.glob(path+"_background_noise_"+'/*')
+    file_list.remove('./train/audio/_background_noise_\\README.md')
+
+    silences = []
+
+    for f in file_list:
+        sample_rate, sample = read(f)
+
+        start = 0
+        end = 16000
+        step = 4000
+        
+        while end <= len(sample):
+            silences.append(sample[start:end])
+            start += step
+            end += step
+    return file_list
+
 

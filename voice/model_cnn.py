@@ -12,7 +12,7 @@ checkpoints_dir = "./gc"
 
 batch_size = 200
 iterations = 50001
-train_size = 64721
+train_size = 64721+1578
 
 def getTrainBatch(spectrograms,labels,lengths):
     #sample= np.random.randint(spectrograms.shape[0], size=batch_size)
