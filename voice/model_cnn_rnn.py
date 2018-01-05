@@ -55,11 +55,11 @@ def validate(val_data, val_lengths, val_labels):
         print("Test Accuracy = {:.3f}".format(np.mean(accuracies)))
 
 def test(test_data, test_lengths, file_list):
-    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-20000.meta')
+    saver = tf.train.import_meta_graph(checkpoints_dir+'/trained_model.ckpt-30000.meta')
     #test_data = test_data[:203]
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-20000')
+        saver.restore(sess, checkpoints_dir+'/trained_model.ckpt-30000')
 
         graph = tf.get_default_graph()
 
@@ -149,7 +149,9 @@ def train(spectrograms,lengths, cats, lim = False):
     sess.close()
 
 def define_graph(limited = False):
-    fully_connected_units = 256 #64  
+    fully_connected_units = 64 #128  
+    hidden_units = 32
+    num_layers=1
 
     if limited:
         output_units = 12 
@@ -162,33 +164,54 @@ def define_graph(limited = False):
         length = tf.cast(length, tf.int32)
         return length
 
+    # Return non-0 output tensor from RNN outputs
+    def last(output, length):
+        layer_size = int(output.get_shape()[2])
+        index = tf.range(0, batch_size) * 40 + (length - 1)
+        flat = tf.reshape(output, [-1, layer_size])
+        last = tf.gather(flat, index)
+        return last
+
+    def conv_lstm_cell_with_dropout():
+        cell = tf.contrib.rnn.ConvLSTMCell(1,(126,129),hidden_units,(3))
+        return tf.contrib.rnn.DropoutWrapper(cell, variational_recurrent=True, dtype=tf.float32 , output_keep_prob=dropout_keep_prob)
+    
+    dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
+
     inputs = tf.placeholder(tf.float32, [batch_size, max_len, 129], name="inputs")
     labels = tf.placeholder(tf.int8, [batch_size, output_units], name="labels")
     input_lengths = tf.placeholder(tf.int32, [batch_size], name="input_lengths")
 
+    cell = tf.nn.rnn_cell.MultiRNNCell(
+        [conv_lstm_cell_with_dropout() for _ in range(num_layers)], state_is_tuple=True)
 
+    initial_state = cell.zero_state(batch_size, tf.float32)
+    outputs, state = tf.nn.dynamic_rnn(cell, inputs, sequence_length=input_lengths, initial_state=initial_state, dtype=tf.float32)
 
-    dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
+    # Get the last non-0 output from RNN
+    last_output = last(outputs, input_lengths)
 
-    input_layer = tf.reshape(inputs, [batch_size, max_len, 129, 1])
-
-    output = tf.layers.conv2d(input_layer,16,7,1,"same",activation=tf.nn.relu)
-    output = tf.layers.max_pooling2d(output, 3, 2)
-    output = tf.layers.conv2d(output,32,5,1,"same",activation=tf.nn.relu)
-    output = tf.layers.max_pooling2d(output, 3, 2)
-    output = tf.layers.conv2d(output,64,3,1,"same",activation=tf.nn.relu)
-    output = tf.layers.max_pooling2d(output, 3, 2)
     
-    output = tf.layers.conv2d(output,128,3,1,"same",activation=tf.nn.relu)
-    output = tf.layers.max_pooling2d(output, 3, 2)
 
-    output = tf.reshape(output, [batch_size, 6 * 7 * 128])
+    #input_layer = tf.reshape(inputs, [batch_size, max_len, 129, 1])
+
+    #output = tf.layers.conv2d(input_layer,16,3,1,"same",activation=tf.nn.relu)
+    #output = tf.layers.max_pooling2d(output, 2, 2)
+    #output = tf.layers.conv2d(output,32,3,1,"same",activation=tf.nn.relu)
+    #output = tf.layers.max_pooling2d(output, 2, 2)
+    #output = tf.layers.conv2d(output,64,3,1,"same",activation=tf.nn.relu)
+    #output = tf.layers.max_pooling2d(output, 2, 2)
+    #print(output.shape)
+    #output = tf.layers.conv2d(output,128,3,1,"same",activation=tf.nn.relu)
+    #output = tf.layers.max_pooling2d(output, 2, 2)
+
+    #output = tf.reshape(output, [batch_size, 7 * 8 * 128])
     
     #output = tf.reshape(output, [batch_size, 15 * 16 * 64])
 
-    fully_connected = tf.layers.dense(output, fully_connected_units, activation=tf.sigmoid)
+    #fully_connected = tf.layers.dense(output, fully_connected_units, activation=tf.sigmoid)
 
-    dropout = tf.layers.dropout(inputs=fully_connected, rate=dropout_keep_prob)
+    #dropout = tf.layers.dropout(inputs=fully_connected, rate=dropout_keep_prob)
 
 
     logits = tf.layers.dense(dropout, output_units, activation=None)

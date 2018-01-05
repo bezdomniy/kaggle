@@ -19,8 +19,8 @@ def run_testing():
     spectrograms, lengths, file_list = load_test_data()
     predictions = test(spectrograms, lengths, file_list)
     with open('out.csv','w') as f:
-        print(predictions[0])
-        np.savetxt(f, predictions, delimiter=",",fmt='%s,%s')
+        csv.writer(f,lineterminator='\n').writerows(predictions)
+        #np.savetxt(f, predictions, delimiter=",",fmt='%18s')
     
 run_training(validation=False)
 #run_testing()
